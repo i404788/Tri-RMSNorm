@@ -14,7 +14,8 @@ import numbers
 class RMSNormFunctionKernel(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, bias, eps):
-        M, N = x.shape
+        M = x.shape[0]
+        N = x.shape[-1]
         y = torch.empty_like(x)
         rstd = torch.empty(M, dtype=torch.float32, device=x.device)
         _rms_norm_fwd_fused[(M,)](x, y, weight, bias, rstd, x.stride(0), N, eps, BLOCK_SIZE=1024)
@@ -38,26 +39,27 @@ class RMSNormFunctionKernel(torch.autograd.Function):
 
 
 class RMSNorm(torch.nn.Module):
-    def __init__(self, dim, bias = True, eps=1e-5, device=None, dtype=None) -> None:
+    def __init__(self, normalized_shape, bias = True, eps=1e-5, device=None, dtype=None) -> None:
+        super().__init__()
         factory_kwargs = {'device': device, 'dtype': dtype}
         if isinstance(normalized_shape, numbers.Integral):
             # mypy error: incompatible types in assignment
             normalized_shape = (normalized_shape,)  # type: ignore[assignment]
         self.normalized_shape = tuple(normalized_shape)  # type: ignore[arg-type]
         self.eps = eps
-        self.weight = Parameter(torch.empty(self.normalized_shape, **factory_kwargs))
+        self.weight = torch.nn.Parameter(torch.empty(self.normalized_shape, **factory_kwargs))
         if bias:
-            self.bias = Parameter(torch.empty(self.normalized_shape, **factory_kwargs))
+            self.bias = torch.nn.Parameter(torch.empty(self.normalized_shape, **factory_kwargs))
 
-            self.reset_parameters()
+        self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        torch.init.ones_(self.weight)
+        torch.nn.init.ones_(self.weight)
         if self.bias is not None:
-            torch.init.zeros_(self.bias)
+            torch.nn.init.zeros_(self.bias)
 
     def forward(self, input):
-        return RMSNormFunctionCustomKernel.apply(input, self.weight, self.bias, self.eps)
+        return RMSNormFunctionKernel.apply(input, self.weight, self.bias, self.eps)
 
 
 
