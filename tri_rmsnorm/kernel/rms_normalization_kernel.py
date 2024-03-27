@@ -49,7 +49,7 @@ def _rms_norm_fwd_fused(
         cols = off + tl.arange(0, BLOCK_SIZE)
         a = tl.load(X + cols, mask=cols < N, other=0.0).to(tl.float32)
         _rms += a * a
-    rms = tl.sqrt(tl.sum(_rms) / N + eps)
+    rms = tl.sqrt(tl.sum(_rms) / (N + eps))
 
     tl.store(Rstd + row, rms)
 
